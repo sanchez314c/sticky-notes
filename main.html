@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self' data:;">
+  <title>Sticky Notes</title>
+  <style>
+    /* ─── DESIGN TOKENS ─────────────────────────────────────────── */
+    :root {
+      /* Backgrounds */
+      --bg-void: #0a0b0e;
+      --bg-surface: #111214;
+      --bg-card: #141518;
+      --bg-card-hover: #1a1b1f;
+      --bg-sidebar: #0d0e10;
+      --bg-tertiary: #18191c;
+      --bg-input: #18191c;
+      --bg-modal: rgba(10,11,14,0.94);
+
+      /* Typography */
+      --text-primary: #e8e8ec;
+      --text-secondary: #9a9aa6;
+      --text-muted: #5c5c6a;
+      --text-dim: #44444e;
+      --text-heading: #f4f4f7;
+      --text-accent: #14b8a6;
+      --text-inverse: #0a0b0e;
+
+      /* Accents */
+      --accent-teal: #14b8a6;
+      --accent-teal-dim: rgba(20,184,166,0.12);
+      --accent-teal-glow: rgba(20,184,166,0.25);
+      --accent-teal-hover: #0d9488;
+      --accent-blue: #06b6d4;
+      --accent-purple: #8b5cf6;
+
+      /* Status */
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+
+      /* Borders */
+      --border-subtle: #1e1e24;
+      --border-light: #2a2a30;
+      --border-glow: rgba(20,184,166,0.25);
+      --border-focus: #14b8a6;
+
+      /* Gradients */
+      --gradient-card: linear-gradient(145deg, #141518, #18191c);
+      --gradient-sidebar: linear-gradient(180deg, #0d0e10, #0a0b0e);
+      --gradient-bg: linear-gradient(160deg, #0a0b0e, #0f1012);
+      --gradient-button: linear-gradient(135deg, #14b8a6, #0d9488);
+
+      /* Shadows — always layered */
+      --shadow-card: 0 2px 4px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.15);
+      --shadow-card-hover: 0 4px 8px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.25), 0 16px 44px rgba(0,0,0,0.2);
+      --shadow-xl: 0 4px 8px rgba(0,0,0,0.15), 0 8px 16px rgba(0,0,0,0.15), 0 16px 32px rgba(0,0,0,0.2), 0 32px 64px rgba(0,0,0,0.25);
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+      --shadow-lg: 0 8px 28px rgba(0,0,0,0.6);
+      --shadow-glow: 0 0 16px rgba(20,184,166,0.15);
+      --shadow-glow-strong: 0 0 24px rgba(20,184,166,0.25);
+
+      /* Glass */
+      --glass-bg: rgba(255,255,255,0.03);
+      --glass-border: rgba(255,255,255,0.05);
+      --glass-highlight: rgba(255,255,255,0.06);
+
+      /* Radius */
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-card: 14px;
+      --radius-button: 10px;
+      --radius-input: 10px;
+      --radius-xl: 20px;
+      --radius-full: 9999px;
+
+      /* Spacing */
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+
+      /* Transitions */
+      --transition-fast: 150ms ease;
+      --transition-normal: 250ms ease;
+    }
+
+    /* ─── GLOBAL RESET ──────────────────────────────────────────── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: transparent !important;
+      margin: 0;
+    }
+
+    body {
+      padding: 16px;
+      height: 100vh;
+      box-sizing: border-box;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', Roboto, sans-serif;
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── SCROLLBARS — invisible at rest ────────────────────────── */
+    * { scrollbar-width: thin; scrollbar-color: rgba(42,42,50,0) transparent; }
+    *:hover { scrollbar-color: #2a2a32 transparent; }
+    *::-webkit-scrollbar { width: 6px; height: 6px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb { background: rgba(42,42,50,0); border-radius: 3px; }
+    *:hover::-webkit-scrollbar-thumb { background: #2a2a32; }
+    *::-webkit-scrollbar-thumb:hover { background: #3a3a44; }
+    *::-webkit-scrollbar-corner { background: transparent; }
+
+    ::selection { background: var(--accent-teal-dim); color: var(--text-heading); }
+
+    /* ─── APP CONTAINER ─────────────────────────────────────────── */
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: var(--gradient-bg);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--shadow-xl);
+    }
+
+    /* Glass top-edge shimmer on the main window frame */
+    .app-container::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ─── DRAG HANDLE ───────────────────────────────────────────── */
+    .drag-handle {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 48px;
+      -webkit-app-region: drag;
+      z-index: 50;
+    }
+
+    button, input, select, a, .note-card {
+      -webkit-app-region: no-drag;
+    }
+
+    /* ─── TITLE BAR ─────────────────────────────────────────────── */
+    .title-bar {
+      display: flex;
+      align-items: center;
+      height: 48px;
+      padding: 0 16px;
+      position: relative;
+      z-index: 100;
+      background: transparent;
+      flex-shrink: 0;
+    }
+
+    .title-bar .app-icon {
+      height: 20px;
+      width: auto;
+      object-fit: contain;
+      margin-right: 10px;
+      -webkit-app-region: no-drag;
+      border-radius: 4px;
+    }
+
+    .title-bar .app-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--accent-teal);
+      margin-right: 10px;
+      white-space: nowrap;
+    }
+
+    .title-bar .app-tagline {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .title-bar .spacer { flex: 1; }
+
+    .title-bar-controls {
+      display: flex;
+      align-items: center;
+      -webkit-app-region: no-drag;
+      z-index: 200;
+    }
+
+    /* FLAT action icons group — About & Settings (no circle background) */
+    .title-bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-right: 10px;
+    }
+
+    .title-bar-action {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      transition: color var(--transition-fast);
+      -webkit-app-region: no-drag;
+    }
+
+    .title-bar-action:hover { color: var(--text-primary); }
+    .title-bar-action#about-btn:hover { color: var(--accent-teal); }
+    .title-bar-action#settings-btn:hover { color: var(--accent-teal); }
+
+    /* CIRCULAR window controls group — Min/Max/Close */
+    .title-bar-window-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .window-ctrl-btn {
+      width: 28px;
+      height: 28px;
+      background: rgba(255,255,255,0.06);
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 13px;
+      transition: all 150ms ease;
+      -webkit-app-region: no-drag;
+    }
+
+    .window-ctrl-btn:hover {
+      background: rgba(255,255,255,0.12);
+      color: var(--text-primary);
+    }
+
+    .window-ctrl-btn.window-close-btn:hover {
+      background: var(--error);
+      color: #ffffff;
+    }
+
+    /* ─── MAIN CONTENT ──────────────────────────────────────────── */
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* ─── HERO CARD ─────────────────────────────────────────────── */
+    .hero-card {
+      background:
+        radial-gradient(ellipse at 80% 80%, rgba(20,184,166,0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 20%, rgba(139,92,246,0.06) 0%, transparent 50%),
+        var(--gradient-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-card);
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+    }
+
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .hero-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 24px 24px;
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .hero-text h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-heading);
+      margin-bottom: 4px;
+    }
+
+    .hero-text p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ─── NEW NOTE BUTTON ───────────────────────────────────────── */
+    .btn-primary {
+      background: var(--gradient-button);
+      color: #0a0b0e;
+      border: none;
+      padding: 10px 20px;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+      flex-shrink: 0;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 24px rgba(20,184,166,0.35);
+    }
+
+    /* ─── STATS ROW ─────────────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--glass-border);
+      border-left: 2px solid var(--accent-teal);
+      border-radius: var(--radius-card);
+      padding: 16px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      transition: all var(--transition-normal);
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+      pointer-events: none;
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-light);
+      border-left-color: var(--accent-teal);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-card-hover);
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent-teal);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── SECTION LABEL ─────────────────────────────────────────── */
+    .section-label {
+      text-transform: uppercase;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    /* ─── NOTES GRID ────────────────────────────────────────────── */
+    .notes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .note-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-card);
+      padding: 14px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      transition: all var(--transition-normal);
+      cursor: pointer;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .note-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+      pointer-events: none;
+    }
+
+    .note-card:hover {
+      border-color: var(--border-light);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-card-hover);
+    }
+
+    .note-card-color-strip {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: var(--radius-card) var(--radius-card) 0 0;
+    }
+
+    .note-card-preview {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      flex: 1;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      margin-top: 6px;
+    }
+
+    .note-card-empty {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
+    .note-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+
+    .note-card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .note-card-label {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* ─── EMPTY STATE ───────────────────────────────────────────── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+      gap: 12px;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      opacity: 0.3;
+    }
+
+    .empty-state-text {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* ─── SETTINGS PANEL OVERLAY ────────────────────────────────── */
+    .settings-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-modal);
+      backdrop-filter: blur(10px);
+      z-index: 998;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 200ms ease;
+    }
+
+    .settings-overlay.active { display: flex; }
+
+    .settings-modal {
+      background: linear-gradient(145deg, #141518, #18191c);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 28px 32px;
+      min-width: 340px;
+      max-width: 420px;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-xl);
+    }
+
+    .settings-modal::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      pointer-events: none;
+    }
+
+    .settings-close-btn {
+      position: absolute;
+      top: 12px; right: 12px;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 150ms ease;
+      z-index: 1;
+    }
+
+    .settings-close-btn:hover { background: var(--error); color: #fff; }
+
+    .settings-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-heading);
+      margin-bottom: 4px;
+    }
+
+    .settings-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .settings-section {
+      margin-bottom: 20px;
+    }
+
+    .settings-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .settings-row:last-child { border-bottom: none; }
+
+    .settings-row-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .settings-row-value {
+      font-size: 13px;
+      color: var(--accent-teal);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* ─── STATUS BAR ────────────────────────────────────────────── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 28px;
+      padding: 0 16px;
+      background: var(--bg-void);
+      border-top: 1px solid var(--border-subtle);
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .status-left { display: flex; align-items: center; gap: 8px; }
+    .status-right { display: flex; align-items: center; gap: 16px; }
+    .app-version { color: var(--accent-teal); font-weight: 500; }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      flex-shrink: 0;
+    }
+
+    /* ─── ABOUT OVERLAY ─────────────────────────────────────────── */
+    .about-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-modal);
+      backdrop-filter: blur(10px);
+      z-index: 999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 200ms ease;
+    }
+
+    .about-overlay.active { display: flex; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .about-modal {
+      background: linear-gradient(145deg, #141518, #18191c);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 32px 40px;
+      min-width: 360px;
+      max-width: 440px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow-xl);
+    }
+
+    .about-modal::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+      pointer-events: none;
+    }
+
+    .about-close-btn {
+      position: absolute;
+      top: 12px; right: 12px;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 150ms ease;
+      z-index: 1;
+    }
+
+    .about-close-btn:hover { background: var(--error); color: #fff; }
+
+    .about-app-icon {
+      width: 64px; height: 64px;
+      border-radius: 12px;
+      margin: 0 auto 16px;
+      display: block;
+    }
+
+    .about-app-name {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-heading);
+      margin: 0 0 4px;
+    }
+
+    .about-version {
+      font-size: 14px;
+      color: var(--accent-teal);
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      margin-bottom: 12px;
+    }
+
+    .about-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .about-license {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .about-github-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--gradient-button);
+      color: #0a0b0e;
+      padding: 10px 24px;
+      border-radius: 9999px;
+      font-weight: 600;
+      font-size: 14px;
+      text-decoration: none;
+      margin-bottom: 12px;
+      box-shadow: 0 0 16px rgba(20,184,166,0.25);
+      transition: all 150ms ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    .about-github-badge:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 24px rgba(20,184,166,0.35);
+    }
+
+    .about-email {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Drag handle — sits above content, lets IPC no-drag opt out on interactive elements -->
+    <div class="drag-handle"></div>
+
+    <!-- Title Bar -->
+    <div class="title-bar">
+      <img src="resources/icons/icon.png" class="app-icon" alt="" draggable="false">
+      <span class="app-name">Sticky Notes</span>
+      <span class="app-tagline">Desktop Notes</span>
+      <div class="spacer"></div>
+      <div class="title-bar-controls">
+        <div class="title-bar-actions">
+          <button class="title-bar-action" id="about-btn" title="About">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </button>
+          <button class="title-bar-action" id="settings-btn" title="Settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+        <div class="title-bar-window-controls">
+          <button class="window-ctrl-btn" id="main-minimize-btn" title="Minimize">&#x2500;</button>
+          <button class="window-ctrl-btn" id="main-maximize-btn" title="Maximize">&#x25A1;</button>
+          <button class="window-ctrl-btn window-close-btn" id="main-close-btn" title="Close">&#x2715;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+      <!-- Hero Card -->
+      <div class="hero-card">
+        <div class="hero-content">
+          <div class="hero-text">
+            <h2>Desktop Notes</h2>
+            <p>Create and manage floating sticky notes on your desktop</p>
+          </div>
+          <button class="btn-primary" id="newNoteBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            New Note
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats Row -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Total Notes</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-open">0</div>
+          <div class="stat-label">Open</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-pinned">0</div>
+          <div class="stat-label">Pinned</div>
+        </div>
+      </div>
+
+      <!-- Notes Section -->
+      <div>
+        <div class="section-label">Active Notes</div>
+        <div class="notes-grid" id="notesGrid">
+          <div class="empty-state">
+            <div class="empty-state-icon">📝</div>
+            <div class="empty-state-text">No notes yet. Create your first note above.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-left">
+        <div class="status-indicator" id="statusBarIndicator"></div>
+        <span id="statusBarText">Ready</span>
+        <span style="color: var(--text-dim);">|</span>
+        <span id="statusBarCount">0 notes</span>
+      </div>
+      <div class="status-right">
+        <span class="app-version">v1.0.0</span>
+      </div>
+    </div>
+
+  </div><!-- .app-container -->
+
+  <!-- About Modal -->
+  <div class="about-overlay" id="aboutOverlay">
+    <div class="about-modal">
+      <button class="about-close-btn" id="aboutCloseBtn">&#x2715;</button>
+      <img src="resources/icons/icon.png" class="about-app-icon" alt="">
+      <h2 class="about-app-name">Sticky Notes</h2>
+      <div class="about-version">v1.0.0</div>
+      <div class="about-desc">A simple, elegant sticky notes application for your desktop</div>
+      <div class="about-license">MIT License | Jason Paul Michaels</div>
+      <button class="about-github-badge" id="aboutGithubBtn">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        GitHub
+      </button>
+      <div class="about-email">software@jasonpaulmichaels.co</div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="settings-overlay" id="settingsOverlay">
+    <div class="settings-modal">
+      <button class="settings-close-btn" id="settingsCloseBtn">&#x2715;</button>
+      <div class="settings-title">Settings</div>
+      <div class="settings-subtitle">Sticky Notes preferences</div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Application</div>
+        <div class="settings-row">
+          <span class="settings-row-label">Version</span>
+          <span class="settings-row-value">v1.0.0</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Default note size</span>
+          <span class="settings-row-value">300 × 300</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Auto-save interval</span>
+          <span class="settings-row-value">1s debounce</span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Storage</div>
+        <div class="settings-row">
+          <span class="settings-row-label">Notes file</span>
+          <span class="settings-row-value">userData/notes.json</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Max note size</span>
+          <span class="settings-row-value">1 MB</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="main-renderer.js"></script>
+</body>
+</html>

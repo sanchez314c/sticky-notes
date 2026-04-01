@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; font-src 'self' data:;">
+  <title>Sticky Note</title>
+  <style>
+    /* ─── TOKENS ─────────────────────────────────────────────────── */
+    :root {
+      --text-on-note: rgba(0, 0, 0, 0.82);
+      --text-on-note-muted: rgba(0, 0, 0, 0.5);
+      --note-header-overlay: rgba(0, 0, 0, 0.10);
+      --note-footer-overlay: rgba(0, 0, 0, 0.06);
+      --note-control-hover: rgba(0, 0, 0, 0.12);
+      --note-close-hover: rgba(220, 38, 38, 0.85);
+      /* Glass-enhanced layered shadow for note depth */
+      --shadow-note:
+        0 4px 8px rgba(0,0,0,0.28),
+        0 8px 24px rgba(0,0,0,0.32),
+        0 16px 44px rgba(0,0,0,0.22),
+        0 2px 4px rgba(0,0,0,0.18);
+      --radius-note: 14px;
+      --transition-fast: 150ms ease;
+      /* Glass border — subtle white shimmer on note edge */
+      --note-glass-border: rgba(255, 255, 255, 0.18);
+      --note-glass-highlight: rgba(255, 255, 255, 0.28);
+    }
+
+    /* ─── GLOBAL ─────────────────────────────────────────────────── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: transparent !important;
+      overflow: hidden;
+    }
+
+    body {
+      /* 6px padding: small float gap so rounded corners show against desktop */
+      padding: 6px;
+      height: 100vh;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', Roboto, sans-serif;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── NOTE CONTAINER — user color as base ────────────────────── */
+    .note-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius-note);
+      /* Layered shadow provides depth without OS hasShadow */
+      box-shadow: var(--shadow-note);
+      background: #ffeb3b; /* overridden by renderer.js applyNoteColor */
+      overflow: hidden;
+      position: relative;
+      /* Glass border — subtle white edge gives the Neo-Noir shimmer */
+      border: 1px solid var(--note-glass-border);
+      transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+    }
+
+    .note-container:hover {
+      border-color: rgba(255, 255, 255, 0.28);
+      box-shadow:
+        0 6px 12px rgba(0,0,0,0.32),
+        0 12px 32px rgba(0,0,0,0.38),
+        0 20px 52px rgba(0,0,0,0.28),
+        0 2px 4px rgba(0,0,0,0.20);
+    }
+
+    /* Glass inner highlight on top edge */
+    .note-container::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--note-glass-highlight), transparent);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ─── NOTE HEADER ────────────────────────────────────────────── */
+    .note-header {
+      height: 34px;
+      background: var(--note-header-overlay);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      -webkit-app-region: drag;
+      cursor: move;
+      flex-shrink: 0;
+    }
+
+    .note-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-on-note-muted);
+      flex: 1;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .note-controls {
+      display: flex;
+      gap: 4px;
+      -webkit-app-region: no-drag;
+      align-items: center;
+    }
+
+    /* ─── CONTROL BUTTONS ────────────────────────────────────────── */
+    .control-btn {
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: background var(--transition-fast);
+      font-size: 11px;
+      color: var(--text-on-note-muted);
+      -webkit-app-region: no-drag;
+    }
+
+    .control-btn:hover {
+      background: var(--note-control-hover);
+      color: var(--text-on-note);
+    }
+
+    .control-btn.close-btn:hover {
+      background: var(--note-close-hover);
+      color: #ffffff;
+    }
+
+    /* ─── PIN INDICATOR ──────────────────────────────────────────── */
+    .pin-indicator {
+      width: 14px;
+      height: 14px;
+      display: none;
+      -webkit-app-region: no-drag;
+      margin-right: 2px;
+      color: var(--text-on-note-muted);
+      flex-shrink: 0;
+    }
+
+    .pin-indicator.active { display: flex; align-items: center; justify-content: center; }
+
+    /* ─── NOTE CONTENT ───────────────────────────────────────────── */
+    .note-content {
+      flex: 1;
+      padding: 12px 14px;
+      overflow-y: auto;
+    }
+
+    /* Scrollbar — semi-transparent, matches note aesthetic */
+    .note-content::-webkit-scrollbar { width: 5px; }
+    .note-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.04); border-radius: 3px; }
+    .note-content::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+    .note-content::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
+    .note-textarea {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: transparent;
+      resize: none;
+      outline: none;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-on-note);
+      font-family: inherit;
+      -webkit-app-region: no-drag;
+      user-select: text;
+    }
+
+    .note-textarea::placeholder {
+      color: var(--text-on-note-muted);
+      font-style: italic;
+    }
+
+    /* ─── NOTE FOOTER ────────────────────────────────────────────── */
+    .note-footer {
+      height: 30px;
+      background: var(--note-footer-overlay);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      flex-shrink: 0;
+    }
+
+    /* ─── COLOR PICKER ───────────────────────────────────────────── */
+    .color-picker {
+      display: flex;
+      gap: 5px;
+      -webkit-app-region: no-drag;
+      align-items: center;
+    }
+
+    .color-option {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(0,0,0,0.2);
+      cursor: pointer;
+      transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .color-option:hover {
+      transform: scale(1.25);
+      box-shadow: 0 0 6px rgba(0,0,0,0.3);
+    }
+
+    .color-option.active {
+      border: 2px solid rgba(0,0,0,0.55);
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.4);
+    }
+
+    /* ─── RESIZE HANDLE ──────────────────────────────────────────── */
+    .resize-handle {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 18px;
+      height: 18px;
+      cursor: nwse-resize;
+      -webkit-app-region: no-drag;
+      opacity: 0.35;
+      transition: opacity var(--transition-fast);
+    }
+
+    .resize-handle:hover { opacity: 0.65; }
+
+    .resize-handle::before {
+      content: '';
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid rgba(0,0,0,0.5);
+      border-bottom: 2px solid rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="note-container" id="noteContainer">
+
+    <div class="note-header">
+      <span class="note-title">Note</span>
+      <div class="note-controls">
+        <!-- Pin indicator — SVG thumbtack, shown when note is always-on-top -->
+        <span class="pin-indicator" id="pinIndicator" title="Pinned">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M16 3a1 1 0 0 0-1 1v1H9V4a1 1 0 0 0-2 0v1a3 3 0 0 0-3 3v1l2 2v6l-2 1v1h14v-1l-2-1V11l2-2V8a3 3 0 0 0-3-3V4a1 1 0 0 0-1-1zm-4 16a2 2 0 0 1-2-2h4a2 2 0 0 1-2 2z"/>
+          </svg>
+        </span>
+        <button class="control-btn" id="newBtn" title="New Note (Ctrl+N)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <button class="control-btn" id="pinBtn" title="Always on Top (Ctrl+T)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="17" x2="12" y2="22"/>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+          </svg>
+        </button>
+        <button class="control-btn" id="minBtn" title="Minimize (Ctrl+M)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+        <button class="control-btn close-btn" id="closeBtn" title="Close (Ctrl+W)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="note-content">
+      <textarea
+        class="note-textarea"
+        id="noteTextarea"
+        placeholder="Type your note here..."
+        spellcheck="true"
+      ></textarea>
+    </div>
+
+    <div class="note-footer">
+      <div class="color-picker">
+        <div class="color-option" data-color="#ffeb3b" style="background: #ffeb3b;" title="Yellow"></div>
+        <div class="color-option" data-color="#ff9800" style="background: #ff9800;" title="Orange"></div>
+        <div class="color-option" data-color="#4caf50" style="background: #4caf50;" title="Green"></div>
+        <div class="color-option" data-color="#2196f3" style="background: #2196f3;" title="Blue"></div>
+        <div class="color-option" data-color="#e91e63" style="background: #e91e63;" title="Pink"></div>
+        <div class="color-option" data-color="#9c27b0" style="background: #9c27b0;" title="Purple"></div>
+        <div class="color-option" data-color="#e0e0e0" style="background: #e0e0e0;" title="White"></div>
+        <div class="color-option" data-color="#263238" style="background: #263238;" title="Dark"></div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
